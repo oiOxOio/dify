@@ -252,7 +252,6 @@ x-shared-env: &shared-api-worker-env
   OCEANBASE_VECTOR_DATABASE: ${OCEANBASE_VECTOR_DATABASE:-test}
   OCEANBASE_CLUSTER_NAME: ${OCEANBASE_CLUSTER_NAME:-difyai}
   OCEANBASE_MEMORY_LIMIT: ${OCEANBASE_MEMORY_LIMIT:-6G}
-  OCEANBASE_ENABLE_HYBRID_SEARCH: ${OCEANBASE_ENABLE_HYBRID_SEARCH:-false}
   OPENGAUSS_HOST: ${OPENGAUSS_HOST:-opengauss}
   OPENGAUSS_PORT: ${OPENGAUSS_PORT:-6600}
   OPENGAUSS_USER: ${OPENGAUSS_USER:-postgres}
@@ -325,7 +324,6 @@ x-shared-env: &shared-api-worker-env
   LOOP_NODE_MAX_COUNT: ${LOOP_NODE_MAX_COUNT:-100}
   MAX_TOOLS_NUM: ${MAX_TOOLS_NUM:-10}
   MAX_PARALLEL_LIMIT: ${MAX_PARALLEL_LIMIT:-10}
-  MAX_ITERATIONS_NUM: ${MAX_ITERATIONS_NUM:-5}
   TEXT_GENERATION_TIMEOUT_MS: ${TEXT_GENERATION_TIMEOUT_MS:-60000}
   PGUSER: ${PGUSER:-${DB_USERNAME}}
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-${DB_PASSWORD}}
@@ -436,8 +434,6 @@ services:
   # API service
   api:
     image: langgenius/dify-api:1.1.3
-    extra_hosts:
-      - "plugin_daemon:192.168.9.38"
     restart: always
     environment:
       # Use the shared environment variables.
@@ -465,8 +461,6 @@ services:
   # The Celery worker for processing the queue.
   worker:
     image: langgenius/dify-api:1.1.3
-    extra_hosts:
-      - "plugin_daemon:192.168.9.38"
     restart: always
     environment:
       # Use the shared environment variables.
@@ -507,7 +501,6 @@ services:
       LOOP_NODE_MAX_COUNT: ${LOOP_NODE_MAX_COUNT:-100}
       MAX_TOOLS_NUM: ${MAX_TOOLS_NUM:-10}
       MAX_PARALLEL_LIMIT: ${MAX_PARALLEL_LIMIT:-10}
-      MAX_ITERATIONS_NUM: ${MAX_ITERATIONS_NUM:-5}
 
   # The postgres database.
   db:
@@ -531,8 +524,6 @@ services:
       interval: 1s
       timeout: 3s
       retries: 30
-    ports:
-      - "5432:5432"  # 将容器端口映射到宿主机
 
   # The redis cache.
   redis:
@@ -544,11 +535,9 @@ services:
       # Mount the redis data directory to the container.
       - ./volumes/redis/data:/data
     # Set the redis password when startup redis server.
-    command: redis-server --requirepass ${REDIS_PASSWORD:-difyai123456} --bind 0.0.0.0
+    command: redis-server --requirepass ${REDIS_PASSWORD:-difyai123456}
     healthcheck:
       test: [ 'CMD', 'redis-cli', 'ping' ]
-    ports: # 新增端口映射
-      - "6379:6379"
 
   # The DifySandbox
   sandbox:
@@ -575,10 +564,6 @@ services:
 
   # plugin daemon
   plugin_daemon:
-    network_mode: "host"
-    extra_hosts:
-      - "db:127.0.0.1"    # 解决数据库解析
-      - "redis:127.0.0.1" # 新增 Redis 解析映射
     image: langgenius/dify-plugin-daemon:0.0.6-local
     restart: always
     environment:
@@ -593,13 +578,13 @@ services:
       DIFY_INNER_API_KEY: ${PLUGIN_DIFY_INNER_API_KEY:-QaHbTe77CtuXmsfyhR7+vRjI/+XbV1AaFy691iy+kGDv2Jvy0/eAh8Y1}
       PLUGIN_REMOTE_INSTALLING_HOST: ${PLUGIN_DEBUGGING_HOST:-0.0.0.0}
       PLUGIN_REMOTE_INSTALLING_PORT: ${PLUGIN_DEBUGGING_PORT:-5003}
-      PLUGIN_WORKING_PATH: "/app/cwd"
+      PLUGIN_WORKING_PATH: ${PLUGIN_WORKING_PATH:-/app/storage/cwd}
       FORCE_VERIFYING_SIGNATURE: ${FORCE_VERIFYING_SIGNATURE:-true}
-      PYTHON_ENV_INIT_TIMEOUT: 600
-      PLUGIN_MAX_EXECUTION_TIMEOUT: 3600
+      PYTHON_ENV_INIT_TIMEOUT: ${PLUGIN_PYTHON_ENV_INIT_TIMEOUT:-120}
+      PLUGIN_MAX_EXECUTION_TIMEOUT: ${PLUGIN_MAX_EXECUTION_TIMEOUT:-600}
       PIP_MIRROR_URL: ${PIP_MIRROR_URL:-}
-#    ports:
-#      - "${EXPOSE_PLUGIN_DEBUGGING_PORT:-5003}:${PLUGIN_DEBUGGING_PORT:-5003}"
+    ports:
+      - "${EXPOSE_PLUGIN_DEBUGGING_PORT:-5003}:${PLUGIN_DEBUGGING_PORT:-5003}"
     volumes:
       - ./volumes/plugin_daemon:/app/storage
     depends_on:
@@ -819,8 +804,7 @@ services:
 
   # OceanBase vector database
   oceanbase:
-    image: oceanbase/oceanbase-ce:4.3.5.1-101000042025031818
-    container_name: oceanbase
+    image: quay.io/oceanbase/oceanbase-ce:4.3.3.0-100000142024101215
     profiles:
       - oceanbase
     restart: always
@@ -833,9 +817,7 @@ services:
       OB_SYS_PASSWORD: ${OCEANBASE_VECTOR_PASSWORD:-difyai123456}
       OB_TENANT_PASSWORD: ${OCEANBASE_VECTOR_PASSWORD:-difyai123456}
       OB_CLUSTER_NAME: ${OCEANBASE_CLUSTER_NAME:-difyai}
-      MODE: MINI
-    ports:
-      - "${OCEANBASE_VECTOR_PORT:-2881}:2881"
+      OB_SERVER_IP: '127.0.0.1'
 
   # Oracle vector database
   oracle:
